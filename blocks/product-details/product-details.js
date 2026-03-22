@@ -220,7 +220,7 @@ function initStockNotification($container) {
       notifLsWrite(currentSku, email);
       showSubscribed();
     } catch (err) {
-      console.log(err)
+      console.log(err);
       setError(err.message);
     } finally {
       $submitBtn.disabled = false;
