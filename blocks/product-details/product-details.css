@@ -171,17 +171,17 @@
   white-space: nowrap;
 }
 
+.stock-notification__submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .stock-notification__submit:hover:not(:disabled) {
   background-color: var(--color-button-hover);
 }
 
 .stock-notification__submit:active:not(:disabled) {
   background-color: var(--color-button-active);
-}
-
-.stock-notification__submit:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .stock-notification__error {
