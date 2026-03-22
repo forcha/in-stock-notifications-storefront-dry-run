@@ -24,6 +24,7 @@ import ProductDescription from '@dropins/storefront-pdp/containers/ProductDescri
 import ProductAttributes from '@dropins/storefront-pdp/containers/ProductAttributes.js';
 import ProductGallery from '@dropins/storefront-pdp/containers/ProductGallery.js';
 import ProductGiftCardOptions from '@dropins/storefront-pdp/containers/ProductGiftCardOptions.js';
+import { getCustomerData } from '@dropins/storefront-auth/api.js';
 
 // Libs
 import {
@@ -32,7 +33,6 @@ import {
   fetchPlaceholders,
   getProductLink,
 } from '../../scripts/commerce.js';
-import { getCustomerData } from '@dropins/storefront-auth/api.js';
 
 // Initializers
 import { IMAGES_SIZES } from '../../scripts/initializers/pdp.js';
@@ -220,6 +220,7 @@ function initStockNotification($container) {
       notifLsWrite(currentSku, email);
       showSubscribed();
     } catch (err) {
+      console.log(err)
       setError(err.message);
     } finally {
       $submitBtn.disabled = false;
