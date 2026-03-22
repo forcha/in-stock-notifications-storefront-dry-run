@@ -32,6 +32,7 @@ import {
   fetchPlaceholders,
   getProductLink,
 } from '../../scripts/commerce.js';
+import { getCustomerData } from '@dropins/storefront-auth/api.js';
 
 // Initializers
 import { IMAGES_SIZES } from '../../scripts/initializers/pdp.js';
@@ -71,6 +72,193 @@ function updateAddToCartButtonText(addToCartInstance, inCart, labels) {
   }
 }
 
+// ── Stock Notification ────────────────────────────────────────────────────────
+
+const NOTIFICATION_API = 'https://1899289-dryrunpd26bcn11-stage.adobeioruntime.net/api/v1/web/stock-notifications';
+
+function notifLsRead(sku) {
+  try { return JSON.parse(localStorage.getItem(`stock-notification:${sku}`)); } catch { return null; }
+}
+function notifLsWrite(sku, email) {
+  localStorage.setItem(`stock-notification:${sku}`, JSON.stringify({ email, subscribed: true }));
+}
+function notifLsRemove(sku) {
+  localStorage.removeItem(`stock-notification:${sku}`);
+}
+
+async function getLoggedInEmail() {
+  try {
+    const result = await getCustomerData();
+    return result?.data?.customer?.email ?? null;
+  } catch { return null; }
+}
+
+async function checkNotificationStatus(sku, email) {
+  try {
+    const params = new URLSearchParams({ sku, email });
+    const res = await fetch(`${NOTIFICATION_API}/check-status?${params}`);
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.result?.subscribed === true;
+  } catch { return false; }
+}
+
+async function postSubscription(sku, email, subscribed) {
+  const endpoint = subscribed ? 'subscribe' : 'unsubscribe';
+  const res = await fetch(`${NOTIFICATION_API}/${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sku, email }),
+  });
+  if (res.ok) return;
+  const data = await res.json().catch(() => ({}));
+  throw new Error(data.error || 'Something went wrong. Please try again.');
+}
+
+function initStockNotification($container) {
+  const $formState = document.createElement('div');
+  $formState.className = 'stock-notification__form-state';
+
+  const $heading = document.createElement('p');
+  $heading.className = 'stock-notification__heading';
+  $heading.textContent = 'Get notified when this is back in stock.';
+
+  const $inputRow = document.createElement('div');
+  $inputRow.className = 'stock-notification__input-row';
+
+  const $emailInput = document.createElement('input');
+  $emailInput.className = 'stock-notification__email';
+  $emailInput.type = 'email';
+  $emailInput.placeholder = 'Your email address';
+  $emailInput.autocomplete = 'email';
+
+  const $submitBtn = document.createElement('button');
+  $submitBtn.className = 'stock-notification__submit';
+  $submitBtn.type = 'button';
+  $submitBtn.textContent = 'Notify Me';
+
+  const $error = document.createElement('p');
+  $error.className = 'stock-notification__error';
+  $error.hidden = true;
+
+  $inputRow.append($emailInput, $submitBtn);
+  $formState.append($heading, $inputRow, $error);
+
+  const $subscribedState = document.createElement('div');
+  $subscribedState.className = 'stock-notification__subscribed-state';
+  $subscribedState.hidden = true;
+
+  const $subscribedMsg = document.createElement('p');
+  $subscribedMsg.className = 'stock-notification__subscribed-msg';
+  $subscribedMsg.textContent = "We'll email you when this is back in stock.";
+
+  const $unsubscribeBtn = document.createElement('button');
+  $unsubscribeBtn.className = 'stock-notification__unsubscribe';
+  $unsubscribeBtn.type = 'button';
+  $unsubscribeBtn.textContent = 'Cancel notification';
+
+  $subscribedState.append($subscribedMsg, $unsubscribeBtn);
+  $container.append($formState, $subscribedState);
+
+  let currentSku = null;
+  let currentEmail = null;
+
+  function setError(msg) {
+    $error.textContent = msg;
+    $error.hidden = !msg;
+  }
+
+  function showForm() {
+    $formState.hidden = false;
+    $subscribedState.hidden = true;
+    setError('');
+  }
+
+  function showSubscribed() {
+    $formState.hidden = true;
+    $subscribedState.hidden = false;
+  }
+
+  async function refreshForSku(sku) {
+    currentSku = sku;
+    showForm();
+
+    const stored = notifLsRead(sku);
+    if (stored?.subscribed && stored?.email) {
+      currentEmail = stored.email;
+      $emailInput.value = stored.email;
+      showSubscribed();
+      return;
+    }
+
+    const loggedInEmail = await getLoggedInEmail();
+    if (loggedInEmail) {
+      currentEmail = loggedInEmail;
+      $emailInput.value = loggedInEmail;
+      if (await checkNotificationStatus(sku, loggedInEmail)) {
+        notifLsWrite(sku, loggedInEmail);
+        showSubscribed();
+        return;
+      }
+    }
+
+    showForm();
+  }
+
+  $submitBtn.addEventListener('click', async () => {
+    const email = $emailInput.value.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    $submitBtn.disabled = true;
+    $submitBtn.textContent = 'Submitting…';
+    setError('');
+    try {
+      await postSubscription(currentSku, email, true);
+      currentEmail = email;
+      notifLsWrite(currentSku, email);
+      showSubscribed();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      $submitBtn.disabled = false;
+      $submitBtn.textContent = 'Notify Me';
+    }
+  });
+
+  $unsubscribeBtn.addEventListener('click', async () => {
+    $unsubscribeBtn.disabled = true;
+    $unsubscribeBtn.textContent = 'Cancelling…';
+    try {
+      await postSubscription(currentSku, currentEmail, false);
+      notifLsRemove(currentSku);
+      currentEmail = null;
+      $emailInput.value = (await getLoggedInEmail()) ?? '';
+      showForm();
+    } catch (err) {
+      setError(err.message);
+      showForm();
+    } finally {
+      $unsubscribeBtn.disabled = false;
+      $unsubscribeBtn.textContent = 'Cancel notification';
+    }
+  });
+
+  return {
+    async updateStock(sku, inStock) {
+      if (inStock === false) {
+        $container.hidden = false;
+        if (sku !== currentSku) await refreshForSku(sku);
+      } else {
+        $container.hidden = true;
+      }
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default async function decorate(block) {
   const eventProduct = events.lastPayload('pdp/data') ?? null;
   // bug: the pdp sends an object with event data even if product is not found.
@@ -105,6 +293,7 @@ export default async function decorate(block) {
             <div class="product-details__buttons__add-to-cart"></div>
             <div class="product-details__buttons__add-to-wishlist"></div>
           </div>
+          <div class="product-details__stock-notification" hidden></div>
         </div>
         <div class="product-details__description"></div>
         <div class="product-details__attributes"></div>
@@ -123,10 +312,13 @@ export default async function decorate(block) {
   const $giftCardOptions = fragment.querySelector('.product-details__gift-card-options');
   const $addToCart = fragment.querySelector('.product-details__buttons__add-to-cart');
   const $wishlistToggleBtn = fragment.querySelector('.product-details__buttons__add-to-wishlist');
+  const $stockNotification = fragment.querySelector('.product-details__stock-notification');
   const $description = fragment.querySelector('.product-details__description');
   const $attributes = fragment.querySelector('.product-details__attributes');
 
   block.replaceChildren(fragment);
+
+  const stockNotification = initStockNotification($stockNotification);
 
   const gallerySlots = {
     CarouselThumbnail: (ctx) => {
@@ -315,6 +507,11 @@ export default async function decorate(block) {
   })($addToCart);
 
   // Lifecycle Events
+  events.on('pdp/data', async (data) => {
+    if (!data?.sku) return;
+    await stockNotification.updateStock(data.sku, data.inStock);
+  }, { eager: true });
+
   events.on('pdp/valid', (valid) => {
     // update add to cart button disabled state based on product selection validity
     addToCart.setProps((prev) => ({ ...prev, disabled: !valid }));
