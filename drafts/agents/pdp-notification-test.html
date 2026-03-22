@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="sku" content="ADB150" />
+  <meta name="template" content="product-details" />
+  <title>PDP Notification Test – ADB150</title>
+
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="script-src 'nonce-aem' 'strict-dynamic' 'unsafe-inline' http: https:; base-uri 'self'; object-src 'none';"
+    move-to-http-header="true"
+  />
+  <script nonce="aem" type="importmap">
+    {
+      "imports": {
+        "@dropins/storefront-account/": "/scripts/__dropins__/storefront-account/",
+        "@dropins/storefront-auth/": "/scripts/__dropins__/storefront-auth/",
+        "@dropins/storefront-cart/": "/scripts/__dropins__/storefront-cart/",
+        "@dropins/storefront-checkout/": "/scripts/__dropins__/storefront-checkout/",
+        "@dropins/storefront-order/": "/scripts/__dropins__/storefront-order/",
+        "@dropins/storefront-payment-services/": "/scripts/__dropins__/storefront-payment-services/",
+        "@dropins/storefront-pdp/": "/scripts/__dropins__/storefront-pdp/",
+        "@dropins/storefront-recommendations/": "/scripts/__dropins__/storefront-recommendations/",
+        "@dropins/storefront-wishlist/": "/scripts/__dropins__/storefront-wishlist/",
+        "@dropins/storefront-personalization/": "/scripts/__dropins__/storefront-personalization/",
+        "@dropins/storefront-product-discovery/": "/scripts/__dropins__/storefront-product-discovery/",
+        "@dropins/tools/": "/scripts/__dropins__/tools/"
+      }
+    }
+  </script>
+
+  <link rel="stylesheet" href="/styles/styles.css" />
+
+  <script nonce="aem" type="module">
+    if (!(HTMLScriptElement.supports?.('importmap'))) {
+      import('/scripts/__dropins__/tools/shims/importmap.js');
+    }
+  </script>
+
+  <script nonce="aem" src="/scripts/aem.js" type="module"></script>
+  <script nonce="aem" src="/scripts/scripts.js" type="module"></script>
+  <script nonce="aem" src="/scripts/commerce.js" type="module"></script>
+
+  <link rel="modulepreload" href="/scripts/__dropins__/tools/lib/aem/configs.js" />
+  <link rel="modulepreload" href="/scripts/initializers/index.js" />
+  <link rel="modulepreload" href="/scripts/initializers/auth.js" />
+  <link rel="modulepreload" href="/scripts/__dropins__/storefront-auth/api.js" />
+  <link rel="modulepreload" href="/scripts/__dropins__/tools/event-bus.js" />
+
+  <style>
+    /* Test helpers panel */
+    #test-controls {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      background: #1e1e1e;
+      color: #fff;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 13px;
+      z-index: 9999;
+      min-width: 260px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    #test-controls h3 { margin: 0 0 12px; font-size: 14px; color: #7dd3fc; }
+    #test-controls button {
+      display: block;
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 8px;
+      background: #374151;
+      color: #fff;
+      border: 1px solid #4b5563;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+    }
+    #test-controls button:hover { background: #4b5563; }
+    #test-log {
+      margin-top: 8px;
+      max-height: 100px;
+      overflow-y: auto;
+      font-size: 11px;
+      color: #86efac;
+    }
+  </style>
+</head>
+<body>
+  <header></header>
+
+  <main>
+    <div class="section">
+      <div class="product-details block" data-block-name="product-details" data-block-status="">
+        <div><div></div></div>
+      </div>
+    </div>
+  </main>
+
+  <footer></footer>
+
+  <!-- Test Controls Panel -->
+  <div id="test-controls">
+    <h3>Stock Notification Tests</h3>
+    <button onclick="simulateOutOfStock()">Simulate Out-of-Stock (ADB150)</button>
+    <button onclick="simulateInStock()">Simulate In-Stock (hide form)</button>
+    <button onclick="simulateVariantSwitch()">Simulate Variant Switch (ADB153)</button>
+    <button onclick="clearLocalStorage()">Clear localStorage</button>
+    <button onclick="showLocalStorage()">Show localStorage entries</button>
+    <div id="test-log"></div>
+  </div>
+
+  <script type="module">
+    // Wait for event bus to be available
+    async function getEvents() {
+      const { events } = await import('/scripts/__dropins__/tools/event-bus.js');
+      return events;
+    }
+
+    function log(msg) {
+      const el = document.getElementById('test-log');
+      el.innerHTML = `<div>${new Date().toLocaleTimeString()}: ${msg}</div>` + el.innerHTML;
+      console.log('[TEST]', msg);
+    }
+
+    window.simulateOutOfStock = async () => {
+      const events = await getEvents();
+      events.emit('pdp/data', { sku: 'ADB150', inStock: false, name: 'Youth Tee' });
+      log('Emitted pdp/data { sku: ADB150, inStock: false }');
+    };
+
+    window.simulateInStock = async () => {
+      const events = await getEvents();
+      events.emit('pdp/data', { sku: 'ADB150', inStock: true, name: 'Youth Tee' });
+      log('Emitted pdp/data { sku: ADB150, inStock: true }');
+    };
+
+    window.simulateVariantSwitch = async () => {
+      const events = await getEvents();
+      events.emit('pdp/data', { sku: 'ADB153', inStock: false, name: 'Youth Tee (M/Blue)' });
+      log('Emitted pdp/data { sku: ADB153, inStock: false } (variant switch)');
+    };
+
+    window.clearLocalStorage = () => {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('stock-notification:'));
+      keys.forEach(k => localStorage.removeItem(k));
+      log(`Cleared ${keys.length} stock-notification localStorage entries`);
+    };
+
+    window.showLocalStorage = () => {
+      const entries = Object.keys(localStorage)
+        .filter(k => k.startsWith('stock-notification:'))
+        .map(k => `${k} → ${localStorage.getItem(k)}`);
+      log(entries.length ? entries.join(' | ') : 'No stock-notification entries');
+    };
+  </script>
+</body>
+</html>
